@@ -76,3 +76,25 @@ Our experiments indicate that selecting low confidence and diverse samples gener
 2. Diverse and low + high confidence
 3. Low and high confidence
 4. Diverse and high confidence
+
+
+
+## Getting Started
+
+To get started, follow these steps:
+
+1. Clone the repository:
+    ```bash
+    git clone https://github.com/your-repo/active-learning.git
+    cd active-learning
+    ```
+
+2. Install the required libraries:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3. Run the `train.py` script, selecting the model and dataset:
+    ```bash
+    python train.py --model resnet18 --dataset cifar10
+    ```
