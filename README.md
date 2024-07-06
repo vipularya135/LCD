@@ -129,6 +129,31 @@ We conducted experiments using the following models and methods:
 |              | LC + HC              | 94.07%         |
 |              | LC + HC + Diverse    | 94.38%         |
 
+
+
+| Dataset      | Model        | LC + Diverse | HC + Diverse | LC + HC  | LC + HC + Diverse |
+| ------------ | ------------ | ------------ | ------------ | -------- | ------------------ |
+| **CIFAR-10** | VGG-16       | 90.86%       | 84.13%       | 88.57%   | 89.95%             |
+|              | ResNet-18    | 91.96%       | 86.67%       | 90.49%   | 91.02%             |
+|              | ResNet-50    | 90.39%       | 80.95%       | 89.08%   | 89.46%             |
+|              | ResNet-56    | 91.67%       | 83.00%       | 88.35%   | 88.70%             |
+|              | Mobilenet    | 87.68%       | 78.78%       | 85.79%   | 86.13%             |
+|              | DenseNet-121 | 92.47%       | 85.18%       | 91.54%   | 91.90%             |
+|              | Swin         | 81.68%       | 69.96%       | 77.67%   | 78.64%             |
+|              | ViT-Small    | 79.60%       | 68.75%       | 76.01%   | 76.46%             |
+| **CIFAR-100**| ResNet-18    | 68.31%       | 57.39%       | 61.77%   | 64.35%             |
+|              | ResNet-50    | 66.88%       | 56.97%       | 64.82%   | 65.12%             |
+|              | DenseNet-121 | 70.29%       | 60.98%       | 66.57%   | 66.91%             |
+|              | Swin         | 54.01%       | 42.94%       | 49.98%   | 49.63%             |
+| **SVHN**     | VGG-16       | 94.20%       | 89.60%       | 93.75%   | 93.80%             |
+|              | ResNet-18    | 95.67%       | 93.71%       | 95.68%   | 95.71%             |
+|              | ResNet-50    | 95.63%       | 94.31%       | 95.63%   | 95.83%             |
+|              | ResNet-56    | 94.97%       | 93.07%       | 95.41%   | 95.21%             |
+|              | Mobilenet    | 94.34%       | 92.65%       | 94.07%   | 94.38%             |
+|              | DenseNet-121 | -            | -            | -        | -                  |
+|              | Swin         | -            | -            | -        | -   
+
+
 ## Conclusion
 
 Our experiments indicate that selecting low confidence and diverse samples generally results in the highest accuracy improvement across various models and datasets. The order of effectiveness from best to worst in our experiments was:
