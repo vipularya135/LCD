@@ -85,8 +85,8 @@ To get started, follow these steps:
 
 1. Clone the repository:
     ```bash
-    git clone https://github.com/your-repo/active-learning.git
-    cd active-learning
+    git clone https://github.com/vipularya135/Active-Learning-Sampling-Techniques
+    cd Active-Learning-Sampling-Techniques
     ```
 
 2. Install the required libraries:
