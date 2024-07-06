@@ -67,7 +67,6 @@ We conducted experiments using the following models and methods:
 |              | ResNet-56    | 94.97%       | 93.07%       | 95.41%   | 95.21%             |
 |              | Mobilenet    | 94.34%       | 92.65%       | 94.07%   | 94.38%             |
 |              | DenseNet-121 | -            | -            | -        | -                  |
-|              | Swin         | -            | -            | -        | -   
 
 
 ## Conclusion
