@@ -94,7 +94,7 @@ To get started, follow these steps:
     pip install -r requirements.txt
     ```
 
-3. Run the `train.py` script, selecting the model and dataset:
+3. Run the `main.py` script, by selecting the model and dataset:
     ```bash
-    python train.py --model resnet18 --dataset cifar10
+    python main.py 
     ```
