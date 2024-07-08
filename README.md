@@ -98,3 +98,23 @@ To get started, follow these steps:
     ```bash
     python main.py 
     ```
+
+## File Descriptions
+
+### 1. Function_Definitions.py
+This file contains the definitions of various functions used throughout the project. These functions might include data preprocessing, model evaluation, and utility functions to streamline the workflow.
+
+### 2. main.py
+This is the main execution script of the project. It coordinates the entire process, from data loading and preprocessing to model training and evaluation. It serves as the entry point to run the project.
+
+### 3. models.py
+This file defines the architecture of the machine learning or deep learning models used in the project. It may include custom model classes, layers, and configurations necessary for training and inference.
+
+### 4. requirements.txt
+This file lists all the Python dependencies and libraries required to run the project. It ensures that anyone who clones the repository can install the exact versions of the dependencies needed to avoid compatibility issues.
+
+### 5. swin.py
+This file implements the Swin Transformer model, a type of Vision Transformer known for its hierarchical design and efficiency in handling computer vision tasks.
+
+### 6. vit-tiny.py
+This file implements the Vision Transformer (ViT) model, specifically the tiny variant, which is designed for image classification tasks with a smaller parameter count and faster training times.
