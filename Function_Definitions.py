@@ -9,6 +9,7 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 import math
+from torchvision.datasets import VOCDetection
 
 # Ensure reproducibility
 seed = 42
@@ -71,9 +72,18 @@ def prepare_data(dataset_name):
         ])
         train_set = datasets.SVHN(root='./data', split='train', download=True, transform=transform_train)
         test_set = datasets.SVHN(root='./data', split='test', download=True, transform=transform_test)
-    
+    elif dataset_name == 'voc2012':
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        train_set = VOCDetection(root='./data', year='2012', image_set='train', download=True, transform=transform)
+        test_set = VOCDetection(root='./data', year='2012', image_set='val', download=True, transform=transform)
+
+        
     else:
-        raise ValueError("Invalid dataset name. Choose from 'cifar10', 'cifar100', or 'svhn'.")
+        raise ValueError("Invalid dataset name. Choose from 'cifar10', 'cifar100', 'svhn', or 'voc2012'.")
 
     torch.manual_seed(42)
     initial_train_set, remainder = torch.utils.data.random_split(train_set, [10000, len(train_set) - 10000])
@@ -285,24 +295,36 @@ def train_until_empty(model, initial_train_set, remainder_set, test_set, max_ite
         print(f"Iteration {iteration + 1}: Test Accuracy - {accuracy}")
 
     return exp_acc
-    
-import copy
 
 def run_all_methods(model, initial_train_set, remainder, test_set):
     methods = [1, 2, 3, 4]
     results = {}
 
+    # Save initial model state
+    initial_model_state = copy.deepcopy(model.state_dict())
+
     for method in methods:
         print(f"\nStarting training with method {method}")
-        #model.load_state_dict(initial_model_state)
+        
+        # Reset model to initial state
+        model.load_state_dict(initial_model_state)
+        
+        # Create deep copies of datasets
         initial_train_set_copy = copy.deepcopy(initial_train_set)
         remainder_copy = copy.deepcopy(remainder)
+        
+        # Initial training
         train_loader = data.DataLoader(initial_train_set_copy, batch_size=64, shuffle=True)
-        train_model(model, train_loader, epochs=50, learning_rate=0.01)
+        train_model(model, train_loader, epochs=1, learning_rate=0.01)
+        
+        # Initial testing
         test_loader = data.DataLoader(test_set, batch_size=64)
-        test_model(model, test_loader)
+        initial_accuracy = test_model(model, test_loader)
+        print(f"Initial accuracy for method {method}: {initial_accuracy}")
+        
+        # Run the active learning iterations
         exp_acc = train_until_empty(model, initial_train_set_copy, remainder_copy, test_set, 
-                                    max_iterations=15, batch_size=64, learning_rate=0.01, method=method)
+                                  max_iterations=15, batch_size=64, learning_rate=0.01, method=method)
         results[f"method_{method}"] = exp_acc
 
     return results

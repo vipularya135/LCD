@@ -1,8 +1,8 @@
-from new_defis import *
+from Function_Definitions import *
 import torch
 import math
 
-torch.cuda.set_device(2) 
+# torch.cuda.set_device(2) 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
 initial_train_set, remainder, test_set = prepare_data("svhn")
 
