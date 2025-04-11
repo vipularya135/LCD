@@ -1,10 +1,9 @@
-from Function_Definitions import *
+from func_def import *
 import torch
 import math
 
 # torch.cuda.set_device(2) 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
-initial_train_set, remainder, test_set = prepare_data("svhn")
 
 num_classes = 10
 
