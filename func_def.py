@@ -254,42 +254,103 @@ def LC_HC_diverse(embed_model, remainder, n, low_conf_ratio=0.5, high_conf_ratio
 
     return combined_dataset, combined_indices
 
-
-def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=1, max_iterations=15, batch_size=64, learning_rate=0.01, method=1):
-    exp_acc = []
+# 5% of new remaining data added to each iteration
+# def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=1, max_iterations=15, batch_size=64, learning_rate=0.01, method=1):
+#     exp_acc = []
     
+#     for iteration in range(max_iterations):
+#         print(f"Starting Iteration {iteration+1}")
+#         print(f"Remainder Size: {len(remainder_set)}")
+#         if len(remainder_set) == 0:
+#             print("Dataset empty. Stopping.")
+#             break
+                    
+#         n_samples = int(0.05 * len(remainder_set))
+#         n_samples = min(n_samples, len(remainder_set)) 
+
+#         if method == 1:
+#             train_data, used_indices = LC_HC(model, remainder_set, n=n_samples)
+#         elif method == 2:
+#             train_data, used_indices = LC_HC_diverse(model, remainder_set, n=n_samples)
+#         elif method == 3:
+#             train_data, used_indices = HC_diverse(model, remainder_set, n=n_samples)
+#         elif method == 4:
+#             train_data, used_indices = LC_diverse(model, remainder_set, n=n_samples)
+#         else:
+#             print("Invalid method.")
+#             return exp_acc
+        
+#         print(f"Selected samples: {len(train_data)}")
+#         print(f"Used indices: {len(used_indices)}")
+    
+#         initial_train_set = data.ConcatDataset([initial_train_set, train_data])
+        
+#         # Update remainder by excluding used indices
+#         used_indices_set = set(used_indices)
+#         remainder_indices = [i for i in range(len(remainder_set)) if i not in used_indices_set]
+#         remainder_set = data.Subset(remainder_set, remainder_indices)
+        
+#         print(f"\nIteration {iteration + 1}")
+#         print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(remainder_set)}")
+#         train_loader = data.DataLoader(initial_train_set, batch_size=batch_size, shuffle=True)
+#         train_model(model, train_loader, epochs=epochs, learning_rate=learning_rate)
+
+#         test_loader = data.DataLoader(test_set, batch_size=batch_size)
+#         accuracy = test_model(model, test_loader)
+#         exp_acc.append(accuracy)
+#         print(f"Iteration {iteration+1} Accuracy: {accuracy}")
+
+#     return exp_acc
+
+# add fixed 5% of total data size-> 
+def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=1, max_iterations=20, batch_size=32, learning_rate=0.01, method=1):
+    exp_acc = []
+    # Get the original full dataset reference
+    original_dataset = remainder_set.dataset
+    # Track used indices in the ORIGINAL dataset space
+    all_used_indices = set()
+    
+    total_data_size = len(initial_train_set) + len(remainder_set)
+
     for iteration in range(max_iterations):
-        print(f"Starting Iteration {iteration+1}")
-        print(f"Remainder Size: {len(remainder_set)}")
         if len(remainder_set) == 0:
             print("Dataset empty. Stopping.")
             break
-                    
-        n_samples = int(0.05 * len(remainder_set))
-        n_samples = min(n_samples, len(remainder_set)) 
 
+        # Calculate 5% of total dataset size
+        n_samples = int(0.05 * total_data_size)
+        if len(remainder_set) < n_samples:
+            n_samples = len(remainder_set)
+
+        # Get current available indices in original dataset space
+        current_remainder_indices = remainder_set.indices
+
+        # Select samples from CURRENT remainder subset
         if method == 1:
-            train_data, used_indices = LC_HC(model, remainder_set, n=n_samples)
+            train_data, subset_used_indices = LC_HC(model, remainder_set, n=n_samples)
         elif method == 2:
-            train_data, used_indices = LC_HC_diverse(model, remainder_set, n=n_samples)
+            train_data, subset_used_indices = LC_HC_diverse(model, remainder_set, n=n_samples)
         elif method == 3:
-            train_data, used_indices = HC_diverse(model, remainder_set, n=n_samples)
+            train_data, subset_used_indices = HC_diverse(model, remainder_set, n=n_samples)
         elif method == 4:
-            train_data, used_indices = LC_diverse(model, remainder_set, n=n_samples)
+            train_data, subset_used_indices = LC_diverse(model, remainder_set, n=n_samples)
         else:
             print("Invalid method.")
             return exp_acc
-        
-        print(f"Selected samples: {len(train_data)}")
-        print(f"Used indices: {len(used_indices)}")
-    
+
+        # Convert subset indices to original dataset indices
+        original_used_indices = [current_remainder_indices[i] for i in subset_used_indices]
+        all_used_indices.update(original_used_indices)
+
+        # Update training set with selected samples
         initial_train_set = data.ConcatDataset([initial_train_set, train_data])
         
-        # Update remainder by excluding used indices
-        used_indices_set = set(used_indices)
-        remainder_indices = [i for i in range(len(remainder_set)) if i not in used_indices_set]
-        remainder_set = data.Subset(remainder_set, remainder_indices)
-        
+        # Create new remainder from ORIGINAL dataset excluding all used indices
+        new_remainder_indices = [i for i in range(len(original_dataset)) 
+                               if i not in all_used_indices]
+        remainder_set = data.Subset(original_dataset, new_remainder_indices)
+
+        # Training and evaluation logic remains the same
         print(f"\nIteration {iteration + 1}")
         print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(remainder_set)}")
         train_loader = data.DataLoader(initial_train_set, batch_size=batch_size, shuffle=True)
@@ -301,7 +362,6 @@ def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=
         print(f"Iteration {iteration+1} Accuracy: {accuracy}")
 
     return exp_acc
-
 def run_all_methods(model, initial_train_set, remainder, test_set):
     methods = [1, 2, 3, 4]
     results = {}
@@ -330,7 +390,7 @@ def run_all_methods(model, initial_train_set, remainder, test_set):
         
         # Run the active learning iterations
         exp_acc = train_until_empty(model, initial_train_set_copy, remainder_copy, test_set, 
-                                  max_iterations=25, batch_size=32, learning_rate=0.01, method=method)
+                                  max_iterations=20, batch_size=32, learning_rate=0.01, method=method)
         results[f"method_{method}"] = exp_acc
 
     return results
