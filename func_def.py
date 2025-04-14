@@ -303,65 +303,87 @@ def LC_HC_diverse(embed_model, remainder, n, low_conf_ratio=0.5, high_conf_ratio
 #     return exp_acc
 
 # add fixed 5% of total data size-> 
-def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=1, max_iterations=20, batch_size=32, learning_rate=0.01, method=1):
+def train_until_empty(model, initial_train_set, remainder_set, test_set,
+                      epochs=50, max_iterations=20, batch_size=32,
+                      learning_rate=0.01, method=1):
+    import numpy as np
+    from torch.utils import data
+
     exp_acc = []
-    # Get the original full dataset reference
+
+    # Reference to original dataset (e.g., CIFAR-10)
     original_dataset = remainder_set.dataset
-    # Track used indices in the ORIGINAL dataset space
-    all_used_indices = set()
-    
-    total_data_size = len(initial_train_set) + len(remainder_set)
+    total_data_size = len(original_dataset)
+
+    # Track train indices explicitly
+    if hasattr(initial_train_set, 'indices'):
+        train_indices = set(initial_train_set.indices)
+    else:
+        raise ValueError("initial_train_set must be a Subset with indices.")
+
+    # Get remainder indices and ensure no overlap
+    remainder_indices = set(remainder_set.indices) - train_indices
+
+    # Create availability mask (True if sample is still in remainder)
+    available_mask = np.ones(len(original_dataset), dtype=bool)
+    available_mask[list(train_indices)] = False
+
+    # Fixed number of samples per iteration
+    fixed_sample_size = int(0.05 * total_data_size)
 
     for iteration in range(max_iterations):
-        if len(remainder_set) == 0:
+        current_remainder_indices = np.where(available_mask)[0]
+        if len(current_remainder_indices) == 0:
             print("Dataset empty. Stopping.")
             break
 
-        # Calculate 5% of total dataset size
-        n_samples = int(0.05 * total_data_size)
-        if len(remainder_set) < n_samples:
-            n_samples = len(remainder_set)
+        current_remainder = data.Subset(original_dataset, current_remainder_indices)
+        print(f"\nStarting Iteration {iteration + 1}")
+        print(f"Remainder Size: {len(current_remainder)}")
 
-        # Get current available indices in original dataset space
-        current_remainder_indices = remainder_set.indices
-
-        # Select samples from CURRENT remainder subset
-        if method == 1:
-            train_data, subset_used_indices = LC_HC(model, remainder_set, n=n_samples)
-        elif method == 2:
-            train_data, subset_used_indices = LC_HC_diverse(model, remainder_set, n=n_samples)
-        elif method == 3:
-            train_data, subset_used_indices = HC_diverse(model, remainder_set, n=n_samples)
-        elif method == 4:
-            train_data, subset_used_indices = LC_diverse(model, remainder_set, n=n_samples)
+        # Decide how many samples to pick
+        if len(current_remainder) <= fixed_sample_size:
+            print("Less than fixed sample size left. Taking all remaining samples.")
+            relative_indices = list(range(len(current_remainder)))
+            train_data = data.Subset(current_remainder.dataset,
+                                     [current_remainder_indices[i] for i in relative_indices])
         else:
-            print("Invalid method.")
-            return exp_acc
+            # Apply selection method
+            if method == 1:
+                train_data, relative_indices = LC_HC(model, current_remainder, n=fixed_sample_size)
+            elif method == 2:
+                train_data, relative_indices = LC_HC_diverse(model, current_remainder, n=fixed_sample_size)
+            elif method == 3:
+                train_data, relative_indices = HC_diverse(model, current_remainder, n=fixed_sample_size)
+            elif method == 4:
+                train_data, relative_indices = LC_diverse(model, current_remainder, n=fixed_sample_size)
+            else:
+                print("Invalid method.")
+                return exp_acc
 
-        # Convert subset indices to original dataset indices
-        original_used_indices = [current_remainder_indices[i] for i in subset_used_indices]
-        all_used_indices.update(original_used_indices)
+        # Convert relative to absolute indices
+        absolute_indices = [current_remainder_indices[i] for i in relative_indices]
+        available_mask[absolute_indices] = False
 
-        # Update training set with selected samples
-        initial_train_set = data.ConcatDataset([initial_train_set, train_data])
-        
-        # Create new remainder from ORIGINAL dataset excluding all used indices
-        new_remainder_indices = [i for i in range(len(original_dataset)) 
-                               if i not in all_used_indices]
-        remainder_set = data.Subset(original_dataset, new_remainder_indices)
+        # Update training set
+        samples_to_add = data.Subset(original_dataset, absolute_indices)
+        all_train_indices = list(train_indices) + absolute_indices
+        train_indices.update(absolute_indices)
+        initial_train_set = data.Subset(original_dataset, all_train_indices)
 
-        # Training and evaluation logic remains the same
-        print(f"\nIteration {iteration + 1}")
-        print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(remainder_set)}")
+        # Print and train
+        print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(current_remainder) - len(absolute_indices)}")
+
         train_loader = data.DataLoader(initial_train_set, batch_size=batch_size, shuffle=True)
         train_model(model, train_loader, epochs=epochs, learning_rate=learning_rate)
 
         test_loader = data.DataLoader(test_set, batch_size=batch_size)
         accuracy = test_model(model, test_loader)
         exp_acc.append(accuracy)
-        print(f"Iteration {iteration+1} Accuracy: {accuracy}")
+        print(f"Iteration {iteration + 1} Accuracy: {accuracy}")
 
     return exp_acc
+
 def run_all_methods(model, initial_train_set, remainder, test_set):
     methods = [1, 2, 3, 4]
     results = {}
