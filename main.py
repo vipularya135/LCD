@@ -12,15 +12,15 @@ def main():
     torch.manual_seed(42)
     
     # Prepare data
-    initial_train_set, remainder, test_set = prepare_data("cifar10") 
+    initial_train_set, remainder, test_set = prepare_data("svhn") 
 
     # All models dictionary
     all_models = {
-        # 'resnet18': ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device),
-        # 'resnet50': ResNet(Bottleneck2, [3, 4, 6, 3], num_classes=10).to(device),
-        # 'resnet56': ResNet(BasicBlock, [9, 9, 9, 9], num_classes=10).to(device),
-        # 'mobilenet': MobileNet(num_classes=10).to(device),
-        # 'densenet121': DenseNet(Bottleneck, [6, 12, 24, 16], growth_rate=32, num_classes=10).to(device),
+        'resnet18': ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device),
+        'resnet50': ResNet(Bottleneck2, [3, 4, 6, 3], num_classes=10).to(device),
+        'resnet56': ResNet(BasicBlock, [9, 9, 9, 9], num_classes=10).to(device),
+        'mobilenet': MobileNet(num_classes=10).to(device),
+        'densenet121': DenseNet(Bottleneck, [6, 12, 24, 16], growth_rate=32, num_classes=10).to(device),
         'vgg16': VGG16(num_classes=10).to(device)
         # 'swin': SwinTransformer(
         #     img_size=32, num_classes=10, window_size=4, patch_size=2,
