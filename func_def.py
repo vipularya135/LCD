@@ -5,91 +5,100 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 import torch.utils.data as data
 import numpy as np
+import copy 
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import euclidean_distances
 import math
-from torchvision.datasets import VOCDetection
-import copy
+import os
+from PIL import Image
+from torch.utils.data import Dataset
 
 seed = 42
 torch.manual_seed(seed)
 np.random.seed(seed)
-
-# Check if GPU is available and set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+class TinyImageNetValDataset(Dataset):
+    def __init__(self, val_dir, transform=None):
+        self.val_dir = val_dir
+        self.transform = transform
+        self.images_dir = os.path.join(val_dir, 'images')
+        self.annotations_file = os.path.join(val_dir, 'val_annotations.txt')
+        self.img_to_class = {}
+        
+        with open(self.annotations_file, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    img_name, class_name = parts[0], parts[1]
+                    self.img_to_class[img_name] = class_name
+        
+        self.images = []
+        for img_name in os.listdir(self.images_dir):
+            if img_name in self.img_to_class:
+                class_name = self.img_to_class[img_name]
+                img_path = os.path.join(self.images_dir, img_name)
+                self.images.append((img_path, class_name))
+        
+        self.classes = sorted(set(self.img_to_class.values()))
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.classes)}
+    
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        img_path, class_name = self.images[idx]
+        image = Image.open(img_path).convert('RGB')
+        label = self.class_to_idx[class_name]
+        
+        if self.transform:
+            image = self.transform(image)
+            
+        return image, label
 
 def prepare_data(dataset_name):
     print('==> Preparing data..')
     
-    if dataset_name == 'cifar10':
-        # CIFAR-10 Normalization
+    if dataset_name == 'tinyimagenet':
+        data_dir = './data/tiny-imagenet-200'
+        train_dir = os.path.join(data_dir, 'train')
+        val_dir = os.path.join(data_dir, 'val')
+        
         transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
+            transforms.RandomResizedCrop(64),
             transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
-        ])
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)),
-        ])
-        train_set = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-        test_set = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
-    
-    elif dataset_name == 'cifar100':
-        # CIFAR-100 Normalization
-        transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-        ])
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-        ])
-        train_set = datasets.CIFAR100(root='./data', train=True, download=True, transform=transform_train)
-        test_set = datasets.CIFAR100(root='./data', train=False, download=True, transform=transform_test)
-    
-    elif dataset_name == 'svhn':
-        # SVHN Normalization
-        transform_train = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
-        ])
-        transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4377, 0.4438, 0.4728), (0.1980, 0.2010, 0.1970)),
-        ])
-        train_set = datasets.SVHN(root='./data', split='train', download=True, transform=transform_train)
-        test_set = datasets.SVHN(root='./data', split='test', download=True, transform=transform_test)
-    elif dataset_name == 'voc2012':
-        transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225])
+                                 std=[0.229, 0.224, 0.225]),
         ])
-        train_set = VOCDetection(root='./data', year='2012', image_set='train', download=True, transform=transform)
-        test_set = VOCDetection(root='./data', year='2012', image_set='val', download=True, transform=transform)
-
         
-    else:
-        raise ValueError("Invalid dataset name. Choose from 'cifar10', 'cifar100', 'svhn', or 'voc2012'.")
+        transform_test = transforms.Compose([
+            transforms.Resize(64),
+            transforms.CenterCrop(64),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225]),
+        ])
+        
+        train_set = datasets.ImageFolder(train_dir, transform=transform_train)
+        test_set = TinyImageNetValDataset(val_dir, transform=transform_test)
+        
+        print(f"Tiny ImageNet Training Set Size: {len(train_set)}")
+        print(f"Tiny ImageNet Validation Set Size: {len(test_set)}")
 
-    torch.manual_seed(42)
+    else:
+        raise ValueError("Invalid dataset name. Choose 'tinyimagenet'.")
+
     initial_size = int(0.04 * len(train_set))
     remainder_size = len(train_set) - initial_size
-    initial_train_set, remainder = torch.utils.data.random_split(train_set, [initial_size, remainder_size])
+    initial_train_set, remainder = data.random_split(train_set, [initial_size, remainder_size])
 
     print(f"Size of initial_train_set: {len(initial_train_set)}")
     print(f"Size of remainder: {len(remainder)}")
 
     return initial_train_set, remainder, test_set
 
-
-        
 def train_model(model, train_loader, epochs, learning_rate):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=5e-4)
@@ -103,7 +112,6 @@ def train_model(model, train_loader, epochs, learning_rate):
             inputs, labels = inputs.to(device), labels.to(device)
 
             optimizer.zero_grad()
-
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -112,11 +120,7 @@ def train_model(model, train_loader, epochs, learning_rate):
             running_loss += loss.item()
 
         print(f'Epoch {epoch + 1}, Loss: {running_loss / len(train_loader)}')
-        
-        # Step the scheduler
         scheduler.step()
-    
-
 
 def test_model(model, test_loader):
     model.eval()
@@ -176,7 +180,7 @@ def least_confidence_images(model, test_dataset, k=None):
     confidences = torch.tensor(confidences)
     k = min(k, len(confidences)) if k is not None else len(confidences)
     _, indices = torch.topk(confidences, k, largest=False)
-    return data.Subset(test_dataset, indices), indices.tolist()  # Convert to list
+    return data.Subset(test_dataset, indices), indices.tolist()
 
 def high_confidence_images(model, test_dataset, k=None):
     test_loader = data.DataLoader(test_dataset, batch_size=64, shuffle=False)
@@ -193,7 +197,7 @@ def high_confidence_images(model, test_dataset, k=None):
     confidences = torch.tensor(confidences)
     k = min(k, len(confidences)) if k is not None else len(confidences)
     _, indices = torch.topk(confidences, k, largest=True)
-    return data.Subset(test_dataset, indices), indices.tolist()  # Convert to list
+    return data.Subset(test_dataset, indices), indices.tolist()
     
 def HC_diverse(embed_model, remainder, n=None):
     high_conf_images, high_conf_indices = high_confidence_images(embed_model, remainder, k=min(2*n, len(remainder)) if n else len(remainder))
@@ -218,19 +222,17 @@ def LC_diverse(embed_model, remainder, n=None):
     return diverse_images, [least_conf_indices[i] for i in diverse_indices]
 
 def LC_HC(model, remainder, n=None):
-    least_confident, least_confident_indices = least_confidence_images(model, remainder, k=n//2)
-    most_confident, most_confident_indices = high_confidence_images(model, remainder, k=n//2)
+    n_half = n // 2
+    least_confident, least_confident_indices = least_confidence_images(model, remainder, k=n_half)
+    most_confident, most_confident_indices = high_confidence_images(model, remainder, k=n_half)
     combined_dataset = data.ConcatDataset([least_confident, most_confident])
-    combined_indices = least_confident_indices + most_confident_indices  # Now lists are concatenated
+    combined_indices = least_confident_indices + most_confident_indices
     return combined_dataset, combined_indices
 
 def LC_HC_diverse(embed_model, remainder, n, low_conf_ratio=0.5, high_conf_ratio=0.5):
-    assert low_conf_ratio + high_conf_ratio == 1.0, "Ratios must sum to 1.0"
-
     n_low = int(n * low_conf_ratio)
     n_high = int(n * high_conf_ratio)
 
-    # Process low confidence
     least_conf_images, least_conf_indices = least_confidence_images(embed_model, remainder, k=min(2*n_low, len(remainder)))
     least_conf_embeddings = extract_embeddings(embed_model, least_conf_images)
     least_conf_embeddings = np.array([np.array(e) for e in least_conf_embeddings])
@@ -240,7 +242,6 @@ def LC_HC_diverse(embed_model, remainder, n, low_conf_ratio=0.5, high_conf_ratio
     diverse_low_indices = get_most_diverse_samples(tsne_results, cluster_centers, n_low)
     diverse_least_conf_images = data.Subset(least_conf_images, diverse_low_indices)
 
-    # Process high confidence
     high_conf_images, high_conf_indices = high_confidence_images(embed_model, remainder, k=min(2*n_high, len(remainder)))
     high_conf_embeddings = extract_embeddings(embed_model, high_conf_images)
     high_conf_embeddings = np.array([np.array(e) for e in high_conf_embeddings])
@@ -254,81 +255,16 @@ def LC_HC_diverse(embed_model, remainder, n, low_conf_ratio=0.5, high_conf_ratio
 
     return combined_dataset, combined_indices
 
-# 5% of new remaining data added to each iteration
-# def train_until_empty(model, initial_train_set, remainder_set, test_set, epochs=1, max_iterations=15, batch_size=64, learning_rate=0.01, method=1):
-#     exp_acc = []
-    
-#     for iteration in range(max_iterations):
-#         print(f"Starting Iteration {iteration+1}")
-#         print(f"Remainder Size: {len(remainder_set)}")
-#         if len(remainder_set) == 0:
-#             print("Dataset empty. Stopping.")
-#             break
-                    
-#         n_samples = int(0.05 * len(remainder_set))
-#         n_samples = min(n_samples, len(remainder_set)) 
-
-#         if method == 1:
-#             train_data, used_indices = LC_HC(model, remainder_set, n=n_samples)
-#         elif method == 2:
-#             train_data, used_indices = LC_HC_diverse(model, remainder_set, n=n_samples)
-#         elif method == 3:
-#             train_data, used_indices = HC_diverse(model, remainder_set, n=n_samples)
-#         elif method == 4:
-#             train_data, used_indices = LC_diverse(model, remainder_set, n=n_samples)
-#         else:
-#             print("Invalid method.")
-#             return exp_acc
-        
-#         print(f"Selected samples: {len(train_data)}")
-#         print(f"Used indices: {len(used_indices)}")
-    
-#         initial_train_set = data.ConcatDataset([initial_train_set, train_data])
-        
-#         # Update remainder by excluding used indices
-#         used_indices_set = set(used_indices)
-#         remainder_indices = [i for i in range(len(remainder_set)) if i not in used_indices_set]
-#         remainder_set = data.Subset(remainder_set, remainder_indices)
-        
-#         print(f"\nIteration {iteration + 1}")
-#         print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(remainder_set)}")
-#         train_loader = data.DataLoader(initial_train_set, batch_size=batch_size, shuffle=True)
-#         train_model(model, train_loader, epochs=epochs, learning_rate=learning_rate)
-
-#         test_loader = data.DataLoader(test_set, batch_size=batch_size)
-#         accuracy = test_model(model, test_loader)
-#         exp_acc.append(accuracy)
-#         print(f"Iteration {iteration+1} Accuracy: {accuracy}")
-
-#     return exp_acc
-
-# add fixed 5% of total data size-> 
 def train_until_empty(model, initial_train_set, remainder_set, test_set,
                       epochs=50, max_iterations=20, batch_size=32,
                       learning_rate=0.01, method=1):
-    import numpy as np
-    from torch.utils import data
-
     exp_acc = []
-
-    # Reference to original dataset (e.g., CIFAR-10)
     original_dataset = remainder_set.dataset
     total_data_size = len(original_dataset)
-
-    # Track train indices explicitly
-    if hasattr(initial_train_set, 'indices'):
-        train_indices = set(initial_train_set.indices)
-    else:
-        raise ValueError("initial_train_set must be a Subset with indices.")
-
-    # Get remainder indices and ensure no overlap
+    train_indices = set(initial_train_set.indices)
     remainder_indices = set(remainder_set.indices) - train_indices
-
-    # Create availability mask (True if sample is still in remainder)
     available_mask = np.ones(len(original_dataset), dtype=bool)
     available_mask[list(train_indices)] = False
-
-    # Fixed number of samples per iteration
     fixed_sample_size = int(0.05 * total_data_size)
 
     for iteration in range(max_iterations):
@@ -341,14 +277,11 @@ def train_until_empty(model, initial_train_set, remainder_set, test_set,
         print(f"\nStarting Iteration {iteration + 1}")
         print(f"Remainder Size: {len(current_remainder)}")
 
-        # Decide how many samples to pick
         if len(current_remainder) <= fixed_sample_size:
-            print("Less than fixed sample size left. Taking all remaining samples.")
             relative_indices = list(range(len(current_remainder)))
             train_data = data.Subset(current_remainder.dataset,
                                      [current_remainder_indices[i] for i in relative_indices])
         else:
-            # Apply selection method
             if method == 1:
                 train_data, relative_indices = LC_HC(model, current_remainder, n=fixed_sample_size)
             elif method == 2:
@@ -361,17 +294,14 @@ def train_until_empty(model, initial_train_set, remainder_set, test_set,
                 print("Invalid method.")
                 return exp_acc
 
-        # Convert relative to absolute indices
         absolute_indices = [current_remainder_indices[i] for i in relative_indices]
         available_mask[absolute_indices] = False
 
-        # Update training set
         samples_to_add = data.Subset(original_dataset, absolute_indices)
         all_train_indices = list(train_indices) + absolute_indices
         train_indices.update(absolute_indices)
         initial_train_set = data.Subset(original_dataset, all_train_indices)
 
-        # Print and train
         print(f"Train Size: {len(initial_train_set)}, Remainder Size: {len(current_remainder) - len(absolute_indices)}")
 
         train_loader = data.DataLoader(initial_train_set, batch_size=batch_size, shuffle=True)
@@ -387,30 +317,22 @@ def train_until_empty(model, initial_train_set, remainder_set, test_set,
 def run_all_methods(model, initial_train_set, remainder, test_set):
     methods = [1, 2, 3, 4]
     results = {}
-
-    # Save initial model state
     initial_model_state = copy.deepcopy(model.state_dict())
 
     for method in methods:
         print(f"\nStarting training with method {method}")
-        
-        # Reset model to initial state
         model.load_state_dict(initial_model_state)
-        
-        # Create deep copies of datasets
         initial_train_set_copy = copy.deepcopy(initial_train_set)
         remainder_copy = copy.deepcopy(remainder)
         
-        # Initial training
         train_loader = data.DataLoader(initial_train_set_copy, batch_size=32, shuffle=True)
-        train_model(model, train_loader, epochs=1, learning_rate=0.01)
+        print("\nStarting initial training with method")
+        train_model(model, train_loader, epochs=50, learning_rate=0.01)
         
-        # Initial testing
         test_loader = data.DataLoader(test_set, batch_size=64)
         initial_accuracy = test_model(model, test_loader)
         print(f"Initial accuracy for method {method}: {initial_accuracy}")
         
-        # Run the active learning iterations
         exp_acc = train_until_empty(model, initial_train_set_copy, remainder_copy, test_set, 
                                   max_iterations=20, batch_size=32, learning_rate=0.01, method=method)
         results[f"method_{method}"] = exp_acc

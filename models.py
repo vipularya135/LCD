@@ -1,11 +1,10 @@
 from func_def import *
 import torch
 import math
+import copy 
 
-# torch.cuda.set_device(2) 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
-
-num_classes = 10
+num_classes = 200
 
 class Bottleneck(nn.Module):
     def __init__(self, in_planes, growth_rate):
@@ -33,7 +32,7 @@ class Transition(nn.Module):
         return out
 
 class DenseNet(nn.Module):
-    def __init__(self, block, nblocks, growth_rate=12, reduction=0.5, num_classes=10):
+    def __init__(self, block, nblocks, growth_rate=12, reduction=0.5, num_classes=200):
         super(DenseNet, self).__init__()
         self.growth_rate = growth_rate
 
@@ -77,7 +76,7 @@ class DenseNet(nn.Module):
         out = self.trans2(self.dense2(out))
         out = self.trans3(self.dense3(out))
         out = self.dense4(out)
-        out = F.avg_pool2d(F.relu(self.bn(out)), 4)
+        out = F.adaptive_avg_pool2d(F.relu(self.bn(out)), (1, 1))
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
@@ -98,10 +97,9 @@ class Block(nn.Module):
         return out
 
 class MobileNet(nn.Module):
-    # (128,2) means conv planes=128, conv stride=2, by default conv stride=1
     cfg = [64, (128,2), 128, (256,2), 256, (512,2), 512, 512, 512, 512, 512, (1024,2), 1024]
 
-    def __init__(self, num_classes=10):  # Change the number of classes to 10 for SVHN
+    def __init__(self, num_classes=200):
         super(MobileNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(32)
@@ -120,7 +118,7 @@ class MobileNet(nn.Module):
     def forward(self, x):
         out = F.relu(self.bn1(self.conv1(x)))
         out = self.layers(out)
-        out = F.avg_pool2d(out, 2)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
@@ -153,7 +151,7 @@ class BasicBlock(nn.Module):
         return out
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=200):
         super(ResNet, self).__init__()
         self.in_planes = 64
 
@@ -180,7 +178,7 @@ class ResNet(nn.Module):
         out = self.layer2(out)
         out = self.layer3(out)
         out = self.layer4(out)
-        out = F.avg_pool2d(out, 4)
+        out = F.adaptive_avg_pool2d(out, (1, 1))
         out = out.view(out.size(0), -1)
         out = self.linear(out)
         return out
@@ -218,18 +216,21 @@ class Bottleneck2(nn.Module):
         out += self.shortcut(x)
         out = F.relu(out)
         return out
+        
 cfg = {
     'VGG16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
 }
 
 class VGG16(nn.Module):
-    def __init__(self, num_classes=10):
+    def __init__(self, num_classes=200):
         super(VGG16, self).__init__()
         self.features = self._make_layers(cfg['VGG16'])
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.classifier = nn.Linear(512, num_classes)
 
     def forward(self, x):
         out = self.features(x)
+        out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         out = self.classifier(out)
         return out
@@ -245,155 +246,14 @@ class VGG16(nn.Module):
                            nn.BatchNorm2d(x),
                            nn.ReLU(inplace=True)]
                 in_channels = x
-        layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
 
-
-"""vgg16 = VGG16().to(device)
-resnet50 = ResNet(Bottleneck2, [3, 4, 6, 3], num_classes=10).to(device)
-resnet56 = ResNet(BasicBlock, [9, 9, 9, 9], num_classes=10).to(device)
-resnet18 = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device)
-mobilenet = MobileNet().to(device)
-densenet121 = DenseNet(Bottleneck, [6,12,24,16], growth_rate=32).to(device)"""
 
 models = {
-    'resnet18': ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device),
-    'resnet50': ResNet(Bottleneck2, [3, 4, 6, 3], num_classes=10).to(device),
-    'resnet56': ResNet(BasicBlock, [9, 9, 9, 9], num_classes=10).to(device),
-    'mobilenet': MobileNet(num_classes=10).to(device),
-    'densenet121': DenseNet(Bottleneck, [6, 12, 24, 16], growth_rate=32, num_classes=10).to(device),
-    'vgg16': VGG16(num_classes=10).to(device)
+    'resnet18': ResNet(BasicBlock, [2, 2, 2, 2], num_classes=200).to(device),
+    'resnet50': ResNet(Bottleneck2, [3, 4, 6, 3], num_classes=200).to(device),
+    'resnet56': ResNet(BasicBlock, [9, 9, 9, 9], num_classes=200).to(device),
+    'mobilenet': MobileNet(num_classes=200).to(device),
+    'densenet121': DenseNet(Bottleneck, [6, 12, 24, 16], growth_rate=32, num_classes=200).to(device),
+    'vgg16': VGG16(num_classes=200).to(device)
 }
-
-# retina-net model
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-# ---------------- ResNetBlock ----------------
-class ResNetBlock(nn.Module):
-    expansion = 4
-    def __init__(self, in_planes, planes, stride=1):
-        super(ResNetBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
-        self.conv3 = nn.Conv2d(planes, self.expansion * planes, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm2d(self.expansion * planes)
-
-        self.downsample = nn.Sequential()
-        if stride != 1 or in_planes != self.expansion * planes:
-            self.downsample = nn.Sequential(
-                nn.Conv2d(in_planes, self.expansion * planes, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(self.expansion * planes)
-            )
-
-    def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-        out = F.relu(self.bn2(self.conv2(out)))
-        out = self.bn3(self.conv3(out))
-        out += self.downsample(x)
-        return F.relu(out)
-
-
-# ---------------- FPN ----------------
-class FPN(nn.Module):
-    def __init__(self, block, num_blocks):
-        super(FPN, self).__init__()
-        self.in_planes = 64
-
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = nn.BatchNorm2d(64)
-
-        self.layer1 = self._make_layer(block, 64, num_blocks[0], stride=1)
-        self.layer2 = self._make_layer(block, 128, num_blocks[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
-
-        self.conv6 = nn.Conv2d(2048, 256, kernel_size=3, stride=2, padding=1)
-        self.conv7 = nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=1)
-
-        self.latlayer1 = nn.Conv2d(2048, 256, kernel_size=1)
-        self.latlayer2 = nn.Conv2d(1024, 256, kernel_size=1)
-        self.latlayer3 = nn.Conv2d(512, 256, kernel_size=1)
-
-        self.toplayer1 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-        self.toplayer2 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
-
-    def _make_layer(self, block, planes, num_blocks, stride):
-        strides = [stride] + [1] * (num_blocks - 1)
-        layers = []
-        for stride in strides:
-            layers.append(block(self.in_planes, planes, stride))
-            self.in_planes = planes * block.expansion
-        return nn.Sequential(*layers)
-
-    def _upsample_add(self, x, y):
-        _, _, H, W = y.size()
-        return F.interpolate(x, size=(H, W), mode='bilinear', align_corners=True) + y
-
-    def forward(self, x):
-        c1 = F.relu(self.bn1(self.conv1(x)))
-        c1 = F.max_pool2d(c1, kernel_size=3, stride=2, padding=1)
-        c2 = self.layer1(c1)
-        c3 = self.layer2(c2)
-        c4 = self.layer3(c3)
-        c5 = self.layer4(c4)
-
-        p5 = self.latlayer1(c5)
-        p4 = self._upsample_add(p5, self.latlayer2(c4))
-        p4 = self.toplayer1(p4)
-        p3 = self._upsample_add(p4, self.latlayer3(c3))
-        p3 = self.toplayer2(p3)
-
-        p6 = self.conv6(c5)
-        p7 = self.conv7(F.relu(p6))
-
-        return [p3, p4, p5, p6, p7]
-
-
-def FPN50():
-    return FPN(ResNetBlock, [3, 4, 6, 3])
-
-
-# ---------------- RetinaNet ----------------
-class RetinaNet(nn.Module):
-    num_anchors = 9
-
-    def __init__(self, num_classes=20):
-        super(RetinaNet, self).__init__()
-        self.fpn = FPN50()
-        self.num_classes = num_classes
-        self.loc_head = self._make_head(self.num_anchors * 4)
-        self.cls_head = self._make_head(self.num_anchors * self.num_classes)
-
-    def forward(self, x):
-        fms = self.fpn(x)
-        loc_preds = []
-        cls_preds = []
-        for fm in fms:
-            loc_pred = self.loc_head(fm)
-            cls_pred = self.cls_head(fm)
-
-            loc_pred = loc_pred.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, 4)
-            cls_pred = cls_pred.permute(0, 2, 3, 1).contiguous().view(x.size(0), -1, self.num_classes)
-
-            loc_preds.append(loc_pred)
-            cls_preds.append(cls_pred)
-
-        return torch.cat(loc_preds, 1), torch.cat(cls_preds, 1)
-
-    def _make_head(self, out_planes):
-        layers = []
-        for _ in range(4):
-            layers.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1))
-            layers.append(nn.ReLU(True))
-        layers.append(nn.Conv2d(256, out_planes, kernel_size=3, stride=1, padding=1))
-        return nn.Sequential(*layers)
-
-    def freeze_bn(self):
-        for layer in self.modules():
-            if isinstance(layer, nn.BatchNorm2d):
-                layer.eval()

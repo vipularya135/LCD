@@ -22,7 +22,7 @@ We conducted experiments using the following models and methods:
    - CIFAR-10
    - CIFAR-100
    - SVHN
-   - PascalVOC-2012
+   - Tint ImageNet 
 
 3. **Experiment Details:**
    - We train our model initially on 10k samples.
